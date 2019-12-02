@@ -65,7 +65,7 @@ class CardDownloader:
             for index, face in enumerate(card["card_faces"]):
                 face_name = self.face_types[index]
                 name = f'{card["set"]}_{card["collector_number"]}_{face_name}'
-                faces.append(self.get_face_details(face_name, face))
+                faces.append(self.get_face_details(name, face))
             return faces
         else:
             assert(card["layout"] in ["normal", "token", "leveler", "adventure"])
