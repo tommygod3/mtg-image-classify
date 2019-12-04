@@ -3,9 +3,11 @@ import os, sys
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, Dropout, MaxPooling2D, BatchNormalization
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications.resnet import ResNet50
 
 color_classnames = ["Black", "Blue", "Colorless", "Green", "Red",
                     "White"]
@@ -21,7 +23,7 @@ def get_relative_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 class ArtCNN:
-    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 64, num_epochs = 200, img_height = 150, img_width = 150, color_bands = 3):
+    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 50, img_height = 224, img_width = 224, color_bands = 3):
         self.dataset_dir = dataset_dir
         self.csv_filename = csv_filename
         self.model_filename = model_filename
@@ -73,32 +75,18 @@ class ArtCNN:
 
     def create_model(self):
         # Create CNN
-        self.model = Sequential([
-            Conv2D(filters=32, kernel_size=(3, 3), strides=1, activation="relu", padding="same", input_shape=self.input_shape),
-            BatchNormalization(axis=-1),
-            MaxPooling2D(pool_size=(3, 3)),
-            Dropout(rate=0.25),
+        inputs = tf.keras.Input(shape = self.input_shape)
+        self.model = ResNet50(
+            weights="imagenet",
+            include_top=False,
+            input_tensor=inputs,
+            pooling="avg"
+        )
 
-            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
-            BatchNormalization(axis=-1),
-            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
-            BatchNormalization(axis=-1),
-            MaxPooling2D(pool_size=(2, 2)),
-            Dropout(rate=0.25),
-
-            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
-            BatchNormalization(axis=-1),
-            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
-            BatchNormalization(axis=-1),
-            MaxPooling2D(pool_size=(2, 2)),
-            Dropout(rate=0.25),
-
-            Flatten(),
-            Dense(units=1024, activation="relu"),
-            BatchNormalization(),
-            Dropout(rate=0.5),
-            Dense(units=len(self.class_names), activation="sigmoid")
-        ])
+        final_layer = self.model.layers[-1].output
+        dense_layer_1 = Dense(128, activation = 'relu')(final_layer)
+        output_layer = Dense(len(self.class_names), activation = 'sigmoid')(dense_layer_1)
+        self.model = keras.Model(inputs, output_layer)
 
         # Display model summary
         self.model.summary()
@@ -122,6 +110,6 @@ class ArtCNN:
 dataset_dir = get_relative_path("../download/art/images")
 
 print("Color:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/color.csv"), model_filename=get_relative_path("color_modelv2.h5"), class_names=color_classnames)
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/color.csv"), model_filename=get_relative_path("color_model_resnet.h5"), class_names=color_classnames)
 print("Type:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/type.csv"), model_filename=get_relative_path("type_modelv2.h5"), class_names=type_classnames)
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/type.csv"), model_filename=get_relative_path("type_model_resnet.h5"), class_names=type_classnames)
