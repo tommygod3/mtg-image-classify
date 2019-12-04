@@ -21,7 +21,7 @@ def get_relative_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 class ArtCNN:
-    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 10, img_height = 100, img_width = 100, color_bands = 3):
+    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 64, num_epochs = 200, img_height = 150, img_width = 150, color_bands = 3):
         self.dataset_dir = dataset_dir
         self.csv_filename = csv_filename
         self.model_filename = model_filename
@@ -42,7 +42,6 @@ class ArtCNN:
         self.dataframe = pd.read_csv(self.csv_filename)
 
         training_data_limit = int(len(self.dataframe)*0.8)
-        validation_data_limit = int(len(self.dataframe)*0.9)
 
         self.datagen = ImageDataGenerator(rescale=1./255,
                                           rotation_range=25, width_shift_range=0.1,
@@ -62,7 +61,7 @@ class ArtCNN:
             class_mode="other")
 
         self.validation_generator = self.test_datagen.flow_from_dataframe(
-            dataframe=self.dataframe[training_data_limit:validation_data_limit],
+            dataframe=self.dataframe[training_data_limit:],
             directory=self.dataset_dir,
             x_col="Filenames",
             y_col=self.class_names,
@@ -70,15 +69,6 @@ class ArtCNN:
             shuffle=True,
             batch_size=self.batch_size,
             class_mode="other")
-
-        self.test_generator = self.test_datagen.flow_from_dataframe(
-            dataframe=self.dataframe[validation_data_limit:],
-            directory=self.dataset_dir,
-            x_col="Filenames",
-            target_size=(self.img_height, self.img_width),
-            shuffle=False,
-            batch_size=1,
-            class_mode=None)
 
 
     def create_model(self):
@@ -127,18 +117,6 @@ class ArtCNN:
             epochs = self.num_epochs)
 
         self.model.save(self.model_filename)
-
-        self.test_generator.reset()
-        predictions = model.predict_generator(
-            self.test_generator,
-            steps=self.test_generator.samples // self.train_generator.batch_size,
-            verbose=1
-        )
-        results = pd.DataFrame(predictions, columns=self.class_names)
-        results["Filenames"] = self.test_generator.filenames
-        ordered_cols = ["Filenames"] + self.class_names
-        results = results[ordered_cols]
-        results.to_csv(get_relative_path("results.csv"))
 
 
 dataset_dir = get_relative_path("../download/art/images")
