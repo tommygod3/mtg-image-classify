@@ -1,9 +1,11 @@
+import os, sys
+
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Conv2D, Flatten, Dropout, MaxPooling2D
+from tensorflow.keras.layers import Dense, Conv2D, Flatten, Dropout, MaxPooling2D, BatchNormalization
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import numpy as np
-from sklearn.utils.class_weight import compute_class_weight
 
 color_classnames = ["Black", "Blue", "Colorless", "Green", "Red",
                     "White"]
@@ -15,9 +17,13 @@ type_classnames = ["Artifact",
                     "Land",
                     "Planeswalker"]
 
+def get_relative_path(filename):
+    return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
+
 class ArtCNN:
-    def __init__(self, dataset_dir, model_filename, class_names, batch_size = 32, num_epochs = 10, img_height = 150, img_width = 150, color_bands = 3):
+    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 10, img_height = 100, img_width = 100, color_bands = 3):
         self.dataset_dir = dataset_dir
+        self.csv_filename = csv_filename
         self.model_filename = model_filename
         self.batch_size = batch_size
         self.num_epochs = num_epochs
@@ -33,43 +39,74 @@ class ArtCNN:
         self.train_model()
 
     def setup_data_generators(self):
+        self.dataframe = pd.read_csv(self.csv_filename)
+
+        training_data_limit = int(len(self.dataframe)*0.8)
+        validation_data_limit = int(len(self.dataframe)*0.9)
+
         self.datagen = ImageDataGenerator(rescale=1./255,
-            shear_range=0.2,
-            zoom_range=0.2,
-            horizontal_flip=True,
-            validation_split=0.2)
+                                          rotation_range=25, width_shift_range=0.1,
+                                          height_shift_range=0.1, shear_range=0.2, zoom_range=0.2,
+                                          horizontal_flip=True, fill_mode="nearest")
 
-        self.train_generator = self.datagen.flow_from_directory(
+        self.test_datagen=ImageDataGenerator(rescale=1./255.)
+
+        self.train_generator = self.datagen.flow_from_dataframe(
+            dataframe=self.dataframe[:training_data_limit],
             directory=self.dataset_dir,
+            x_col="Filenames",
+            y_col=self.class_names,
             target_size=(self.img_height, self.img_width),
             shuffle=True,
             batch_size=self.batch_size,
-            class_mode="categorical",
-            subset="training")
+            class_mode="other")
 
-        self.validation_generator = self.datagen.flow_from_directory(
+        self.validation_generator = self.test_datagen.flow_from_dataframe(
+            dataframe=self.dataframe[training_data_limit:validation_data_limit],
             directory=self.dataset_dir,
+            x_col="Filenames",
+            y_col=self.class_names,
             target_size=(self.img_height, self.img_width),
             shuffle=True,
             batch_size=self.batch_size,
-            class_mode="categorical",
-            subset="validation")
+            class_mode="other")
+
+        self.test_generator = self.test_datagen.flow_from_dataframe(
+            dataframe=self.dataframe[validation_data_limit:],
+            directory=self.dataset_dir,
+            x_col="Filenames",
+            target_size=(self.img_height, self.img_width),
+            shuffle=False,
+            batch_size=1,
+            class_mode=None)
 
 
     def create_model(self):
         # Create CNN
         self.model = Sequential([
-            Conv2D(filters=32, kernel_size=(3, 3), strides=1, activation="relu", input_shape=self.input_shape),
-            MaxPooling2D(),
+            Conv2D(filters=32, kernel_size=(3, 3), strides=1, activation="relu", padding="same", input_shape=self.input_shape),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(3, 3)),
             Dropout(rate=0.25),
-            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu"),
-            MaxPooling2D(),
+
+            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(2, 2)),
             Dropout(rate=0.25),
-            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu"),
-            MaxPooling2D(),
+
+            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(2, 2)),
             Dropout(rate=0.25),
+
             Flatten(),
-            Dense(units=128, activation="relu"),
+            Dense(units=1024, activation="relu"),
+            BatchNormalization(),
+            Dropout(rate=0.5),
             Dense(units=len(self.class_names), activation="sigmoid")
         ])
 
@@ -84,14 +121,29 @@ class ArtCNN:
     def train_model(self):
         self.model.fit_generator(
             self.train_generator,
-            steps_per_epoch = self.train_generator.samples // self.batch_size,
+            steps_per_epoch = self.train_generator.samples // self.train_generator.batch_size,
             validation_data = self.validation_generator, 
-            validation_steps = self.validation_generator.samples // self.batch_size,
+            validation_steps = self.validation_generator.samples // self.validation_generator.batch_size,
             epochs = self.num_epochs)
 
         self.model.save(self.model_filename)
 
-print("Color: ")
-ArtCNN(dataset_dir="../download/art/color", model_filename="color_model.h5", class_names=color_classnames)
-print("Type: ")
-ArtCNN(dataset_dir="../download/art/type", model_filename="type_model.h5", class_names=type_classnames)
+        self.test_generator.reset()
+        predictions = model.predict_generator(
+            self.test_generator,
+            steps=self.test_generator.samples // self.train_generator.batch_size,
+            verbose=1
+        )
+        results = pd.DataFrame(predictions, columns=self.class_names)
+        results["Filenames"] = self.test_generator.filenames
+        ordered_cols = ["Filenames"] + self.class_names
+        results = results[ordered_cols]
+        results.to_csv(get_relative_path("results.csv"))
+
+
+dataset_dir = get_relative_path("../download/art/images")
+
+print("Color:")
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/color.csv"), model_filename=get_relative_path("color_modelv2.h5"), class_names=color_classnames)
+print("Type:")
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/type.csv"), model_filename=get_relative_path("type_modelv2.h5"), class_names=type_classnames)

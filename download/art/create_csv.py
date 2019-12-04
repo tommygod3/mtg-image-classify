@@ -3,7 +3,8 @@ from pathlib import Path
 from sklearn.preprocessing import MultiLabelBinarizer
 
 import os, sys
-def full_path(filename):
+
+def get_relative_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 
@@ -14,6 +15,8 @@ for color in colors.glob("*"):
         if filename.name not in color_images:
             color_images[filename.name] = []
         color_images[filename.name].append(color.name)
+    
+# TODO: add headers, use df?
 
 color_filenames = [filename for filename in color_images.keys()]
 random.shuffle(color_filenames)
