@@ -19,7 +19,7 @@ type_classnames = ["Artifact",
                     "Land",
                     "Planeswalker"]
 
-def get_relative_path(filename):
+def get_absolute_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 class ArtCNN:
@@ -107,9 +107,9 @@ class ArtCNN:
         self.model.save(self.model_filename)
 
 
-dataset_dir = get_relative_path("../download/art/images")
+dataset_dir = get_absolute_path("../download/art/images")
 
 print("Color:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/color.csv"), model_filename=get_relative_path("color_model_resnet.h5"), class_names=color_classnames)
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_absolute_path("../download/art/color.csv"), model_filename=get_absolute_path("color_model_resnet.h5"), class_names=color_classnames)
 print("Type:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_relative_path("../download/art/type.csv"), model_filename=get_relative_path("type_model_resnet.h5"), class_names=type_classnames)
+ArtCNN(dataset_dir=dataset_dir, csv_filename=get_absolute_path("../download/art/type.csv"), model_filename=get_absolute_path("type_model_resnet.h5"), class_names=type_classnames)

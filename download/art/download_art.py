@@ -1,11 +1,20 @@
-import json, shutil, os
+import json, shutil, os, sys, random, csv
 
 import urllib.request
 from ratelimit import limits, sleep_and_retry
 from tqdm import tqdm
 
+from sklearn.preprocessing import MultiLabelBinarizer
+
 class CardDownloader:
-    types = {"Enchantment":"Enchantment",
+    colors_mapping = {"W": "White",
+              "U": "Blue",
+              "B": "Black",
+              "R": "Red",
+              "G": "Green",
+              "C": "Colorless"}
+
+    types_mapping = {"Enchantment":"Enchantment",
              "Creature":"Creature",
              "Artifact":"Artifact",
              "Instant":"InstantSorcery",
@@ -13,19 +22,14 @@ class CardDownloader:
              "Land":"Land",
              "Planeswalker":"Planeswalker"}
 
-    colors = {"W": "White",
-              "U": "Blue",
-              "B": "Black",
-              "R": "Red",
-              "G": "Green",
-              "C": "Colorless"}
-
     face_types = {0 : "front",
                   1 : "back"}
 
     def __init__(self, number_of_cards = 0):
-        with open("scryfall-artwork-cards.json") as reader:
+        with open(CardDownloader.get_absolute_path("scryfall-artwork-cards.json")) as reader:
             self.cards = json.load(reader)
+
+        self.labelled_cards = {}
 
         self.make_directories()
 
@@ -36,6 +40,9 @@ class CardDownloader:
         else:
             num_downloads = len(self.cards)
         
+        self.setup_class_names()
+        self.mlb = MultiLabelBinarizer(self.class_names)
+
         # Download how many cards we want
         for index, card in tqdm(enumerate(self.cards), total=num_downloads):
             if number_of_cards:
@@ -43,20 +50,44 @@ class CardDownloader:
                     break
             self.download_card(card)
 
-    @sleep_and_retry
-    @limits(calls=10, period=1)
+        # Create csvs
+        self.create_csv()
+
+    def setup_class_names(self):
+        colors_class_names = [class_name for real_name, class_name in self.colors_mapping.items()]
+        types_class_names = [class_name for real_name, class_name in self.types_mapping.items()]
+        types_class_names = list(set(types_class_names))
+
+        self.class_names = colors_class_names
+        self.class_names.extend(types_class_names)
+        self.class_names.sort()
+        print(self.class_names)
+
+    def create_csv(self):
+        with open(CardDownloader.get_absolute_path("images.csv"), "w") as writer:
+            csv_writer = csv.writer(writer)
+            csv_writer.writerow(["Filename", *self.class_names])
+            card_filenames = [filename for filename in self.labelled_cards.keys()]
+            random.shuffle(card_filenames)
+            for card_filename in card_filenames:
+                csv_writer.writerow([card_filename, *self.labelled_cards[card_filename]])
+
     def download_card(self, card):
         for face in self.get_card_details(card):
-            self.download_from_url(*face)
+            self.download_face(*face)
 
-    def download_from_url(self, name, colors, card_types, url):
-        first_download_filename = f"type/{card_types[0]}/{name}.jpg"
-        urllib.request.urlretrieve(url, first_download_filename)
-        for card_type in card_types[1:]:
-            shutil.copy2(first_download_filename, f"type/{card_type}/{name}.jpg")
+    def download_face(self, name, colors, card_types, url):
+        if len(colors) == 1 and len(card_types) == 1:
+            #self.download_from_url(name, url)
+            all_labels = colors
+            all_labels.extend(card_types)
+            self.labelled_cards[name] = self.mlb.fit_transform([all_labels])[0]
 
-        for color in colors:
-            shutil.copy2(first_download_filename, f"color/{color}/{name}.jpg")
+    @sleep_and_retry
+    @limits(calls=10, period=1)
+    def download_from_url(self, name, url):
+        download_filename = CardDownloader.get_absolute_path(f"images/{name}.jpg")
+        urllib.request.urlretrieve(url, download_filename)
 
     def get_card_details(self, card):
         """ Returns card details in form: name, colors, card_types, url """
@@ -86,14 +117,14 @@ class CardDownloader:
         if colors:
             translated_colors = []
             for color in colors:
-                translated_colors.append(self.colors[color]) 
+                translated_colors.append(self.colors_mapping[color]) 
             return translated_colors
         else:
-            return [self.colors["C"]]
+            return [self.colors_mapping["C"]]
 
     def valid_type_line(self, type_line):
         for card_type in type_line.split(" —")[0].split(" "):
-            for valid_type in self.types:
+            for valid_type in self.types_mapping:
                 if card_type == valid_type:
                     return True
         return False
@@ -101,8 +132,8 @@ class CardDownloader:
     def get_card_types(self, type_line):
         card_types = []
         for card_type in type_line.split("//")[0].split(" —")[0].split(" "):
-            if card_type in self.types:
-                card_types.append(self.types[card_type])
+            if card_type in self.types_mapping:
+                card_types.append(self.types_mapping[card_type])
         assert(card_types)
         return card_types
 
@@ -118,17 +149,12 @@ class CardDownloader:
         return True
 
     def make_directories(self):
-        if not os.path.isdir("type"):
-            os.mkdir("type")
-        for card_type, translation in self.types.items():
-            if not os.path.isdir(f"type/{translation}"):
-                os.mkdir(f"type/{translation}")
+        if not os.path.isdir("images"):
+            os.mkdir("images")
 
-        if not os.path.isdir("color"):
-            os.mkdir("color")
-        for color, translation in self.colors.items():
-            if not os.path.isdir(f"color/{translation}"):
-                os.mkdir(f"color/{translation}")
+    def get_absolute_path(filename):
+        return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
+
 
 
 CardDownloader()
