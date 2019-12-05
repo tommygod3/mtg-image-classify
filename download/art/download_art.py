@@ -61,7 +61,6 @@ class CardDownloader:
         self.class_names = colors_class_names
         self.class_names.extend(types_class_names)
         self.class_names.sort()
-        print(self.class_names)
 
     def create_csv(self):
         with open(CardDownloader.get_absolute_path("images.csv"), "w") as writer:
@@ -81,7 +80,7 @@ class CardDownloader:
             #self.download_from_url(name, url)
             all_labels = colors
             all_labels.extend(card_types)
-            self.labelled_cards[name] = self.mlb.fit_transform([all_labels])[0]
+            self.labelled_cards[f"{name}.jpg"] = self.mlb.fit_transform([all_labels])[0]
 
     @sleep_and_retry
     @limits(calls=10, period=1)

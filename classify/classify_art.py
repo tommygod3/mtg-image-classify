@@ -19,11 +19,13 @@ type_classnames = ["Artifact",
                     "Land",
                     "Planeswalker"]
 
+combined_classnames = ['Artifact', 'Black', 'Blue', 'Colorless', 'Creature', 'Enchantment', 'Green', 'InstantSorcery', 'Land', 'Planeswalker', 'Red', 'White']
+
 def get_absolute_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 class ArtCNN:
-    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 50, img_height = 224, img_width = 224, color_bands = 3):
+    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 50, img_height = 150, img_width = 150, color_bands = 3):
         self.dataset_dir = dataset_dir
         self.csv_filename = csv_filename
         self.model_filename = model_filename
@@ -55,7 +57,7 @@ class ArtCNN:
         self.train_generator = self.datagen.flow_from_dataframe(
             dataframe=self.dataframe[:training_data_limit],
             directory=self.dataset_dir,
-            x_col="Filenames",
+            x_col="Filename",
             y_col=self.class_names,
             target_size=(self.img_height, self.img_width),
             shuffle=True,
@@ -65,7 +67,7 @@ class ArtCNN:
         self.validation_generator = self.test_datagen.flow_from_dataframe(
             dataframe=self.dataframe[training_data_limit:],
             directory=self.dataset_dir,
-            x_col="Filenames",
+            x_col="Filename",
             y_col=self.class_names,
             target_size=(self.img_height, self.img_width),
             shuffle=True,
@@ -75,18 +77,32 @@ class ArtCNN:
 
     def create_model(self):
         # Create CNN
-        inputs = tf.keras.Input(shape = self.input_shape)
-        self.model = ResNet50(
-            weights="imagenet",
-            include_top=False,
-            input_tensor=inputs,
-            pooling="avg"
-        )
+        self.model = Sequential([
+            Conv2D(filters=32, kernel_size=(3, 3), strides=1, activation="relu", padding="same", input_shape=self.input_shape),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(3, 3)),
+            Dropout(rate=0.25),
 
-        final_layer = self.model.layers[-1].output
-        dense_layer_1 = Dense(128, activation = 'relu')(final_layer)
-        output_layer = Dense(len(self.class_names), activation = 'sigmoid')(dense_layer_1)
-        self.model = keras.Model(inputs, output_layer)
+            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(2, 2)),
+            Dropout(rate=0.25),
+
+            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            Conv2D(filters=128, kernel_size=(3, 3), strides=1, activation="relu", padding="same"),
+            BatchNormalization(axis=-1),
+            MaxPooling2D(pool_size=(2, 2)),
+            Dropout(rate=0.25),
+
+            Flatten(),
+            Dense(units=1024, activation="relu"),
+            BatchNormalization(),
+            Dropout(rate=0.5),
+            Dense(units=len(self.class_names), activation="sigmoid")
+        ])
 
         # Display model summary
         self.model.summary()
@@ -108,8 +124,8 @@ class ArtCNN:
 
 
 dataset_dir = get_absolute_path("../download/art/images")
+csv_filename = get_absolute_path("../download/art/images.csv")
+model_filename = get_absolute_path("model.h5")
 
-print("Color:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_absolute_path("../download/art/color.csv"), model_filename=get_absolute_path("color_model_resnet.h5"), class_names=color_classnames)
-print("Type:")
-ArtCNN(dataset_dir=dataset_dir, csv_filename=get_absolute_path("../download/art/type.csv"), model_filename=get_absolute_path("type_model_resnet.h5"), class_names=type_classnames)
+print("Combined:")
+ArtCNN(dataset_dir=dataset_dir, csv_filename=csv_filename, model_filename=model_filename, class_names=combined_classnames)
