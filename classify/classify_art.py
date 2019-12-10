@@ -25,7 +25,7 @@ def get_absolute_path(filename):
     return f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/{filename}"
 
 class ArtCNN:
-    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 50, img_height = 150, img_width = 150, color_bands = 3):
+    def __init__(self, dataset_dir, csv_filename, model_filename, class_names, batch_size = 32, num_epochs = 100, img_height = 150, img_width = 150, color_bands = 3):
         self.dataset_dir = dataset_dir
         self.csv_filename = csv_filename
         self.model_filename = model_filename

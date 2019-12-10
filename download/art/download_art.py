@@ -77,7 +77,7 @@ class CardDownloader:
 
     def download_face(self, name, colors, card_types, url):
         if len(colors) == 1 and len(card_types) == 1:
-            #self.download_from_url(name, url)
+            self.download_from_url(name, url)
             all_labels = colors
             all_labels.extend(card_types)
             self.labelled_cards[f"{name}.jpg"] = self.mlb.fit_transform([all_labels])[0]
